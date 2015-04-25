@@ -1,0 +1,860 @@
+!
+!   PROJECT: OI2014-082 IRMS DCN Pipeline Analysis
+!   VERSION: A0                                  
+!   AUTHOR: Duco Chapelle                        
+!
+!   ANSYS VERSION: 15.0
+!   UNITS: Newton / mm / tonne / s
+!   force       = tonne*mm/s/s = N
+!   mass        = tonne
+!   accel       = mm/s/s
+!   length      = mm
+!   pressure    = tonne*mm/s/s/mm/mm = N/mm/mm = MPa
+!   CS: x = length, y = up, surface is at y = 0 + pipe diameter.
+!
+ 
+C*** General
+FINISH $ /CLEAR,START $ /ESHA,1 $ /PBC,U,,1 $ /PBC,ROT,,1
+
+!===================================================================
+C*** Definitions
+!===================================================================
+
+! Place 0 and 8 are touchdown points. Other points are supports.
+! Input from KDS-OFF-REP-145513-002 table 12
+
+place_8=211038.340994698
+place_7=228033.109435063
+place_6=245024.448590425
+place_5=265017.57336431
+place_4=269016.674082028
+place_3=274016.970186918
+place_2=283017.267403668
+place_1=291017.72948245
+place_0=305019.165373101
+
+! Pipe
+pipe_init_h         = -20000    ! Initial height of pipe above the seabed
+pipe_length         = 500000    ! Length of pipe [mm]
+pipe_diameter       = 812.8     ! Outer diameter pipe [mm]
+pipe_wallthk        = 15.9      ! Wall thickness pipe [mm]
+pipe_nc             = 24        ! Circumferential elements [-]
+pipe_nl             = 100       ! Length of elements [mm]
+ext_cor_coat_thk    = 2.5       ! External corrosion coating [mm]
+con_coat_thk        = 100       ! Concrete coating [mm] 
+g_acc               = 9806      ! Gravitational acceleration [mm/s^2]
+water_depth         = 24500     ! Used ad-hoc, for below-soil coordinates
+seabed_width        = 5000
+seabed_thickness    = 1000
+
+C*** Material Properties
+! Densities [tonne/mm3]
+ext_cor_coat        = 1.280e-9  ! [tonne/mm3]
+concrete_coating    = 3.043e-9  ! [tonne/mm3]
+content             = 1e-11     ! [tonne/mm3]
+seawater            = 1.025e-9  ! [tonne/mm3]
+steel               = 7.85e-9   ! [tonne/mm3]
+soil                = 1e-15     ! [tonne/mm3]
+! Other
+absorption          = 0.05      ! [-]
+pi                  = acos(-1)  ! [-]
+soil_E              = 1.5e1     ! [MPa]
+soil_v              = 0.3       ! [-]
+steel_E             = 207e3     ! [MPa]
+steel_v             = 0.3       ! [-]
+soil_mu             = 0.05      ! [-]
+
+C*** Added Mass
+weight_con_coat = (((pipe_diameter+2*ext_cor_coat_thk+2*con_coat_thk)**2)-((pipe_diameter+2*ext_cor_coat_thk)**2))*pi*0.25*concrete_coating
+weight_ext_cor_coat = ((pipe_diameter+2*ext_cor_coat_thk)**2-pipe_diameter**2)*pi*0.25*ext_cor_coat
+weight_buoyancy = ((pipe_diameter+2*ext_cor_coat_thk+2*con_coat_thk)**2)*0.25*pi*seawater
+weight_water_absorption= (weight_con_coat*absorption)/(concrete_coating/seawater)
+total_dry_weight = weight_ext_cor_coat + weight_con_coat 
+added_mass = (total_dry_weight-weight_buoyancy)+weight_water_absorption
+load_con = 1e-8*g_acc*0.25*pi*(pipe_diameter-2*pipe_wallthk)**2 ! surface area in pipe for content density
+
+C*** Hydrostatic Pressure
+hyd_pres = water_depth*g_acc*seawater
+
+C*** Load content
+load_content = ((pipe_diameter-(2*pipe_wallthk))**2)*0.25*pi*content*g_acc
+
+C*** Content Pressure
+pres_stp = 6
+*dim,pres_int,array,pres_stp
+pres_int(1) = 2.07, 2.76, 3.45, 4.14, 4.83, 7.93
+
+C*** Configurations
+conf_stp = 5
+! 1 = no clamp
+! 2 = clamp
+! 3 = sleeve
+! 4 etc...
+
+!===================================================================
+/PREP7 
+!===================================================================
+
+C*** Define material
+!steel
+MPTEMP,,,,,,,, 
+MPTEMP,1,0 
+MPDATA,EX,1,,steel_E
+MPDATA,PRXY,1,,steel_v
+MPTEMP,,,,,,,, 
+MPTEMP,1,0 
+MPDATA,DENS,1,,steel 
+!soil
+MPTEMP,,,,,,,, 
+MPTEMP,1,0 
+MPDATA,EX,2,,soil_E 
+MPDATA,PRXY,2,,soil_v 
+MPTEMP,,,,,,,, 
+MPTEMP,1,0 
+MPDATA,DENS,2,,soil
+ 
+C*** Define pipe
+ET,1,PIPE288
+SECTYPE,1,PIPE, ,  
+SECDATA,pipe_diameter,pipe_wallthk,pipe_nc,0,1,0,0,0,
+SECOFFSET,0,0, 
+SECCONTROL,added_mass,  
+KEYOPT,1,6,1
+KEYOPT,1,4,2
+ 
+C*** Define soil
+ET,2,SOLID185
+  
+C*** Geometry
+! Pipe
+K,,0,pipe_init_h,0  
+K,,pipe_length,pipe_init_h,0
+line_pipe_start = 1
+line_pipe_end = 2
+L,1,2  
+*get, line_pipe, LINE, 0, NUM, MAX
+
+C*** Create Supports and Seabed
+*get,kp_min,KP,0,NUM,MAX        ! Get minimum KP/Line number
+kp_min = kp_min+1               ! ...
+*get,ln_min,LINE,0,NUM,MAX      ! ...
+ln_min = ln_min+1               ! ...
+/INPUT,main,mac,,:FUN_SOIL      ! Create KPs from excel data
+*get,kp_max,KP,0,NUM,MAX        ! Get maximum KP number
+
+KSEL,,,,kp_min,kp_max           ! Give an offset to all just 
+KMODIF, ALL,  , , seabed_width/2! created KPs, so that the pipe
+ALLSEL                          ! will stay in the center.
+
+
+*SET, kp_a, kp_min              ! Draw lines between all the KPs
+*GET, kp_b, KP,kp_a,NXTH        ! ...
+*DOWHILE, kp_b                  ! ...
+    L, kp_a, kp_b               ! ...
+    *SET, kp_a, kp_b            ! ...
+    *GET, kp_b, KP,kp_a,NXTH    ! ...
+*ENDDO                          ! ...
+! ln_min defined above          ! ...
+*GET, ln_max, LINE,0,NUM,MAX    ! ...
+
+K,,0,-2*water_depth,0                       ! Draw drag lines
+    *GET, kp_a, KP,0,NUM, MAX               ! for extrusion
+K,,0,-2*water_depth-seabed_thickness,0      ! ...
+    *GET, kp_b, KP,0,NUM, MAX               ! ...
+K,,0,-2*water_depth,-seabed_width           ! ...
+    *GET, kp_c, KP,0,NUM, MAX               ! ...
+L,kp_a, kp_b                                ! ...
+    *GET, drag_line_y, LINE, 0, NUM, MAX    ! ...
+L,kp_a, kp_c                                ! ...
+    *GET, drag_line_z, LINE, 0, NUM, MAX    ! ...
+
+*DO, ln, ln_min, ln_max                     ! ...
+    ADRAG, ln,,,,,,drag_line_y              ! Extrude lines to areas
+    *GET, ar, AREA, 0, NUM, MAX             ! ...
+    VDRAG, ar,,,,,,drag_line_z              ! Extrude areas to volumes
+*ENDDO                                      ! ...
+
+VSEL,S,LOC,X, place_8, place_0              ! Get rid of volumes
+*DO,n,1,7                                   ! that are not supports
+    VSEL,U,LOC,X, place_%n%                 ! nor seabed
+*ENDDO                                      ! ...
+VSEL, INVERT                                ! ...
+ASLV                                        ! ...
+LSLA                                        ! ...
+KSLL                                        ! ...
+VSEL, INVERT                                ! ...
+ASEL, INVERT                                ! ...
+LSEL, INVERT                                ! ...
+KSEL, INVERT                                ! ...
+LSEL,u,,,1                                  ! ...
+KSEL,u,,,1,2                                ! ...
+VDELE, ALL                                  ! ...
+ADELE, ALL                                  ! ...
+LDELE, ALL                                  ! ...
+KDELE, ALL                                  ! ...
+
+ALLSEL                                      ! Merge coincident areas, 
+NUMMRG, ALL                                 ! lines and KPs
+
+C*** define support and soil fix and contact areas
+ASEL, NONE                      ! Reset components        
+CM, seabed_contact, AREA        ! ...
+CM, seabed_fix, AREA            ! ...
+CM, support_contact, AREA       ! ...
+CM, support_fix, AREA           ! ...
+ALLSEL                          ! Select everything
+CM, v_cm, VOLUME                ! Create volumes component
+*GET, v, VOLUME, 0, NXTH        ! Define the first volume
+*DOWHILE, v                     ! 
+    VSEL,S,,,v                  ! Select the volume
+    ASLV                        ! Select its areas
+    CM, a_cm, AREA              ! Put them in a component
+    cent_y_max = -2*water_depth ! Set highest area are very low
+    cent_y_min =  2*water_depth ! Set lowest area very high        
+    cent_y_max_a = 0            ! Reset highest area id
+    cent_y_min_a = 0            ! Reset lowest area id
+    *GET, a, AREA, 0, NXTH      ! Define the first area
+    *DOWHILE, a                 ! GET THE HIGHEST AND LOWEST AREA AND THE LOCATION IN PIPE LENGTH DIRECTION:
+        ASEL,S,,,a                                  ! Select the area
+        LSLA $ KSLL                                 ! Select its KPs
+        cent_y = 0                                  ! Reset current area hight
+        cent_x = 0                                  ! Reset current area length
+        *GET, kp_n, KP, 0, NXTH                     ! Define the first KP
+        *DOWHILE, kp_n                              !
+            cent_y = cent_y+KY(kp_n)/4              ! Get area hight (average of each KP)
+            cent_x = cent_x+KX(kp_n)/4              ! Get area length (average of each KP)
+            *GET, kp_n, KP, kp_n, NXTH              ! Define the next KP
+        *ENDDO                      
+        *IF, cent_y, GT, cent_y_max, THEN           ! If this area is higher than the greatest hight
+            cent_y_max = cent_y                     ! Then this hight is now the greatest
+            cent_y_max_a = a                        ! And keep note which area it was
+            x = cent_x                              ! Also, the length of the highest is the correct length
+        *ELSEIF, cent_y, LT, cent_y_min, THEN       ! Otherwise, if this area is lower than the lowest hight
+            cent_y_min = cent_y                     ! Then this is now the lowest hight        
+            cent_y_min_a = a                        ! And keep not which area it was.
+        *ENDIF                                      !
+        CMSEL, S, a_cm                              ! Select all areas of this volume    
+        *GET, a, AREA, a, NXTH                      ! Define the next area
+    *ENDDO                      ! SAVE THE AREAS IN THE CORRESPONDING COMPONENTS AND GO TO THE NEXT VOLUME
+    *IF, x, LT, place_8, OR, x, GT, place_0, THEN  
+        CMSEL,S, seabed_fix     ! Select the component                   
+        ASEL,a,,,cent_y_min_a   ! Append the area               
+        CM,seabed_fix, AREA     ! Update the component
+        CMSEL,S, seabed_contact ! For instance, contact areas of the seabed,               
+        ASEL,a,,,cent_y_max_a   ! are areas with the greatest hight,
+        CM,seabed_contact, AREA ! so they are appended.
+    *ELSE                       ! If the volume is in between the touchdown points,
+        CMSEL,S, support_fix    ! it belongs to one of the supports.
+        ASEL,a,,,cent_y_max_a   ! Support contacts and fixations are both the top,
+        CM,support_fix, AREA    ! therefore, the highest areas are used.
+        CMSEL,S, support_contact! Select the component
+        ASEL,a,,,cent_y_max_a   ! Append the area     
+        CM,support_contact, AREA! Update the component
+    *ENDIF                      !
+    CMSEL, S, v_cm              ! Select all the volumes
+    *GET, v, VOLUME, v, NXTH    ! Define the next volume           
+*ENDDO                          !
+ALLSEL
+
+C*** Mesh
+LESIZE,1,pipe_nl
+LMESH,line_pipe
+CM,LP_E,ELEM
+VMESH,ALL
+CMSEL,,LP_E
+NSLE
+*GET,node_numbers, NODE,0,COUNT
+ALLSEL
+ 
+C*** Contact
+! Setup contact
+MP,MU,2,soil_mu
+MAT,2 ! nodig? 
+R,4
+REAL,4
+ET,3,170
+ET,4,177
+R,4,,,0.1,1.0,0,10.0  ! the '10.0' factors the pinball region
+RMORE,,,1.0E20,pipe_diameter/2,1.0,
+RMORE,0.0,0,1.0,,1.0,0.5
+RMORE,0,1.0,1.0,0.0,,1.0
+RMORE,10.0 
+KEYOPT,4,4,0
+KEYOPT,4,5,0
+KEYOPT,4,7,0
+KEYOPT,4,8,0
+KEYOPT,4,9,0
+KEYOPT,4,10,2  
+KEYOPT,4,11,0  
+KEYOPT,4,12,0  
+KEYOPT,4,2,0
+KEYOPT,3,5,0
+! Generate the target surface  
+ASEL,S,,,seabed_contact
+ASEL,A,,,support_contact
+TYPE,3 
+NSLA,S,1
+ESLN,S,0
+ESLL,U 
+ESURF  
+! Generate the contact surface 
+LSEL,S,,,line_pipe 
+TYPE,4 
+NSLL,S,1
+ESLN,S,0
+ESURF  
+ALLSEL 
+
+!===================================================================
+/SOLU
+!===================================================================
+ANTYPE,0
+NLGEOM,1
+! PSOLVE, ELFORM ! Partial solve to check for mass
+
+!-------------------------------------------------------------------
+C*** Load step 1: Displacement & external pressure
+!-------------------------------------------------------------------
+! pipe left side
+KSEL,S,LOC,X,0
+KSEL,U,,,line_pipe_start
+*GET, kp_a, KP, 0, NXTH
+ALLSEL
+DK,line_pipe_start,UX,0
+DK,line_pipe_start,UY,KY(kp_a)-KY(line_pipe_start)+pipe_diameter/2
+DK,line_pipe_start,UZ,0
+DK,line_pipe_start,ROTX,0
+DK,line_pipe_start,ROTY,0
+DK,line_pipe_start,ROTZ,0
+
+! pipe right side
+*GET, kp_bx, KP, line_pipe_end, LOC, X
+KSEL,U,,,line_pipe_start,line_pipe_end
+kp_b = KP(kp_bx,KY(kp_a),2500)
+ALLSEL
+DK,line_pipe_end,UY,KY(kp_b)-KY(line_pipe_end)+pipe_diameter/2
+DK,line_pipe_end,UZ,0
+DK,line_pipe_end,ROTX,0
+DK,line_pipe_end,ROTY,0
+DK,line_pipe_end,ROTZ,0
+
+! support
+DA,seabed_fix,ALL
+DA,support_fix,ALL
+
+! external pressure & hydrostatic pressure
+SFE,LP_E,2,PRES,1,hyd_pres
+
+SOLVE
+
+!-------------------------------------------------------------------
+C*** Load step 2: Apply gravity
+!-------------------------------------------------------------------
+CMACEL,LP_E, , g_acc, ,
+SOLVE
+
+!-------------------------------------------------------------------
+C*** Load step 3: Release ends vertically
+!-------------------------------------------------------------------
+DKDELE,line_pipe_start,UY   ! Rest on seabed instead of constrain
+DKDELE,line_pipe_end,UY     ! Rest on seabed instead of constrain
+SOLVE
+
+!-------------------------------------------------------------------
+C*** Load step 4: Constrain ends axially
+!-------------------------------------------------------------------
+KSEL,,,,line_pipe_end
+NSLK
+*GET, u, NODE, NDNEXT(0), U, X
+DK,line_pipe_end,UX,u
+ALLSEL
+SOLVE
+
+!-------------------------------------------------------------------
+C*** Load step 5+: Internal pressure 
+!-------------------------------------------------------------------
+
+init_steps = 4 ! number of load steps to skip for post
+
+! conf 1
+*DO,n,1,pres_stp
+  SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
+  F,ALL,FY, -pres_int(n)*pipe_length*load_content/node_numbers ! content weight
+  SOLVE
+*ENDDO
+
+! conf 2
+*DO,n,1,pres_stp
+  SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
+  F,ALL,FY, -pres_int(n)*pipe_length*load_content/node_numbers ! content weight
+  ! add force for plidco / removed concrete
+  SOLVE
+*ENDDO
+
+! conf 2
+*DO,n,1,pres_stp
+  SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
+  F,ALL,FY, -pres_int(n)*pipe_length*load_content/node_numbers ! content weight
+  ! add force for plidco / removed concrete
+  ! a = node(place_1,0,0)
+  ! F,a,FY, ....
+  ! add force for s.o.s.
+  SOLVE
+*ENDDO
+
+! conf 3
+! etc...
+
+
+!===================================================================
+/POST1
+!===================================================================
+
+SET,LAST
+PLNS,S,EQV
+
+CMSEL,S,LP_E
+*GET,elem_count,ELEM,0,COUNT
+*DIM,graph, TABLE, elem_count, pres_stp+1
+*DIM, argument, CHAR, 6
+*DO, n, 1, pres_stp, 
+  /GCOLUMN, n, LC_%n%
+*ENDDO
+
+!direct hardcopies
+/SHOW, PNG, png
+PNGR, DEFAULT
+
+*DO,m,1,conf_stp
+    ! X: add location and displacement, convert to meters
+    ETABLE,ux, U, X
+    ETABLE,centx, CENT, X
+    SADD,locx, ux, centx, 1/1000, 1/1000, 0 
+    *VGET, graph(1,1), ELEM, all, ETAB, locx
+    *VOPER, graph(1,1), graph(1,1),ADD,137741
+    /XRANGE, 137900, 138100
+    
+    
+    /AXLAB,Y,Height [mm]
+    /AXLAB,X,Location [m]
+    /YRANGE, -2.6e4, -2e4
+    argument(1) = 'uy', 'U', 'Y','centy', 'CENT', 'Y'
+    /INPUT,main,mac,,:FUN2_PLOT
+    
+    /AXLAB,Y,Bending moment [Nmm]
+    /AXLAB,X,Location [m]
+    /YRANGE, -2.35e9, 1.0e9
+    argument(1) = 'Mz1', 'SMISC', '3' 
+    /INPUT,main,mac,,:FUN_PLOT
+    
+    /AXLAB,Y,Normal Stress [MPa]
+    /AXLAB,X,Location [m]
+    /YRANGE, 0, 80
+    argument(1) = 'SDIR', 'SMISC', '31'
+    /INPUT,main,mac,,:FUN_PLOT
+    
+    /AXLAB,Y,Bending Stress Top [MPa]
+    /AXLAB,X,Location [m]
+    /YRANGE, -1.1e2, 2.7e2
+    argument(1) = 'SByT', 'SMISC', '32'
+    /INPUT,main,mac,,:FUN_PLOT
+    
+    /AXLAB,Y,Bending Stress Bottom [MPa]
+    /AXLAB,X,Location [m]
+    /YRANGE, -2.7e2, 1.1e2
+    argument(1) = 'SByB', 'SMISC', '33'
+    /INPUT,main,mac,,:FUN_PLOT
+    
+    /AXLAB,Y,Hoop Stress [MPa]
+    /AXLAB,X,Location [m]
+    /YRANGE, 0, 2e2
+    argument(1) = 'Mhs1', 'SMISC', '64'
+    /INPUT,main,mac,,:FUN_PLOT
+    
+    /AXLAB,Y,Axial Stress Top [MPa]
+    /AXLAB,X,Location [m]
+    /YRANGE, -1.5e2, 3.0e2
+    argument(1) = 'SDIR', 'SMISC', '31','SByT', 'SMISC', '32'
+    /INPUT,main,mac,,:FUN2_PLOT
+    
+    /AXLAB,Y,Axial Stress Bottom [MPa]
+    /AXLAB,X,Location [m]
+    /YRANGE, -2.5e2, 2.0e2
+    argument(1) = 'SDIR', 'SMISC', '31','SByT', 'SMISC', '33'
+    /INPUT,main,mac,,:FUN2_PLOT
+    /SHOW, CLOSE
+    
+    C*** Get node displacements around crack
+    a=node(place_1-5000,0,0)
+    b=node(place_1+5000,0,0)
+    *CFOPEN,displacement,txt
+    *DIM, us, ARRAY, pres_stp, 6
+    *DO, n, 1, pres_stp
+        SET, n+init_steps, LAST
+        *GET,aux, NODE, a, U, X
+        *GET,auy, NODE, a, U, Y
+        *GET,auz, NODE, a, U, Z
+        *GET,bux, NODE, b, U, X
+        *GET,buy, NODE, b, U, Y
+        *GET,buz, NODE, b, U, Z
+        *GET,arotx, NODE, a, ROT, X
+        *GET,aroty, NODE, a, ROT, Y
+        *GET,arotz, NODE, a, ROT, Z
+        *GET,brotx, NODE, b, ROT, X
+        *GET,broty, NODE, b, ROT, Y
+        *GET,brotz, NODE, b, ROT, Z
+        C*** aux, auy, arotz, bux, buy, brotz 
+        us(1,n) =  0, 0, -arotz*180/pi, bux-aux, buy-auy, -brotz*180/pi
+        *VWRITE,us(1,n) ,us(2,n),us(3,n),us(4,n),us(5,n),us(6,n)
+    (G16.8,G16.8,G16.8,G16.8,G16.8,G16.8)
+    *ENDDO
+    *CFCLOS
+    init_steps = init_steps + pres_steps
+*ENDDO
+
+    
+C*** Clean up, the images
+/SYS, i_view32 *.png /invert /convert=*.png
+/SYS, md images
+/SYS, move *.png images
+
+C*** THE END!
+/EOF
+
+!===================================================================
+C*** FUNCTIONS
+!===================================================================
+
+:FUN_PLOT
+    *DO, n, 1, pres_stp
+        SET, n+init_steps, LAST
+        ETABLE,argument(1), argument(2), argument(3)
+        *VGET, graph(1,n+1), ELEM, all, ETAB, argument(1)
+    *ENDDO
+    *VPLOT, graph(1,1), graph(1,2), 3, 4, 5, 6, 7
+/EOF
+
+:FUN2_PLOT
+    *DO, n, 1, pres_stp
+        SET, n+init_steps, LAST
+        ETABLE,argument(1), argument(2), argument(3)
+        ETABLE,argument(4), argument(5), argument(6)
+        SADD, temp, argument(1), argument(4), 1, 1, 0
+        *VGET, graph(1,n+1), ELEM, all, ETAB, temp
+    *ENDDO
+    *VPLOT, graph(1,1), graph(1,2), 3, 4, 5, 6, 7
+/EOF
+
+:FUN_SOIL
+    ! Input from KDS-OFF-REP-145513-002 table 14 (appendix 12, OUT survey)
+    ! About 100 meter is added before and after these measurements.
+    
+    K,kp_min,0              ,-23728
+    K,,(1000:110000:1000)   ,-23728
+    
+    K,,110999.99999999      ,-23728
+    K,,112000.922074849,-23726
+    K,,113001.517673934,-23724
+    K,,114002.4396749,-23711
+    K,,115003.361712457,-23695
+    K,,116004.283764892,-23679
+    K,,117004.879349092,-23669
+    K,,118005.475001917,-23661
+    K,,119006.070696649,-23654
+    K,,120006.340266461,-23653
+    K,,121007.555395833,-23655
+    K,,122007.825307267,-23657
+    K,,123009.04076122,-23636
+    K,,124009.310857944,-23605
+    K,,125010.20092616,-23575
+    K,,126010.471178533,-23574
+    K,,127012.012490422,-23585
+    K,,128012.28276879,-23595
+    K,,129012.878531724,-23594
+    K,,130013.474300907,-23588
+    K,,131014.395618784,-23582
+    K,,132015.317009475,-23585
+    K,,133015.618683184,-23592
+    K,,134017.191857436,-23599
+    K,,135017.819988466,-23605
+    K,,136018.448493061,-23611
+    K,,137019.40352888,-23616
+    K,,138020.359083537,-23611
+    K,,139021.315101223,-23603
+    K,,140022.271534239,-23594
+    K,,141023.228340835,-23603
+    K,,142023.240385373,-23618
+    K,,143024.524757938,-23633
+    K,,144025.482600207,-23638
+    K,,145026.44068918,-23640
+    K,,146027.399003916,-23641
+    K,,147028.357525388,-23630
+    K,,148029.316237043,-23614
+    K,,149029.947790873,-23598
+    K,,150030.906778783,-23597
+    K,,151031.538491244,-23602
+    K,,152032.170256629,-23607
+    K,,153033.746929883,-23613
+    K,,154034.378779848,-23619
+    K,,155034.683148728,-23626
+    K,,156035.932365182,-23625
+    K,,157036.854073539,-23623
+    K,,158037.77579749,-23620
+    K,,159038.042643401,-23617
+    K,,160038.927169997,-23613
+    K,,161039.194367607,-23610
+    K,,162039.752164259,-23609
+    K,,163040.928248904,-23608
+    K,,164041.159960521,-23607
+    K,,165041.683485775,-23604
+    K,,166041.881299411,-23600
+    K,,167042.406952114,-23597
+    K,,168042.899338842,-23609
+    K,,169043.393534287,-23627
+    K,,170043.563340676,-23645
+    K,,171044.028679,-23642
+    K,,172043.845356916,-23631
+    K,,173043.665430089,-23620
+    K,,174044.404390933,-23613
+    K,,175044.498311835,-23608
+    K,,176043.976639065,-23603
+    K,,177044.054054859,-23603
+    K,,178043.814464658,-23604
+    K,,179043.5821804,-23605
+    K,,180043.656370329,-23622
+    K,,181043.73867766,-23644
+    K,,182042.559532825,-23666
+    K,,183042.657266515,-23664
+    K,,184042.440005602,-23652
+    K,,185042.552015733,-23641
+    K,,186042.670594538,-23631
+    K,,187042.169807346,-23621
+    K,,188042.300406765,-23611
+    K,,189041.810492943,-23608
+    K,,190041.646117723,-23608
+    K,,191042.113021492,-23609
+    K,,192041.957435674,-23607
+    K,,193041.805861327,-23605
+    K,,194041.658153912,-23603
+    K,,195041.194660743,-23574
+    K,,196041.363517747,-23536
+    K,,197040.908142654,-23499
+    K,,198041.395438807,-23497
+    K,,199040.939982324,-23508
+    K,,200040.489329341,-23518
+    K,,201040.354963849,-23509
+    K,,202039.908177865,-23494
+    K,,203039.784902688,-23479
+    K,,204040.297575505,-23468
+    K,,205039.550259059,-23458
+    K,,206039.125679607,-23449
+    K,,207039.337903487,-23431
+    K,,208039.24023274,-23411
+    K,,209038.830561899,-23390
+    K,,210038.425537585,-23359
+    K,,211038.340994698,-23325
+    K,,212038.260441178,-23290
+    K,,213037.868156873,-23262
+    K,,214037.480001196,-23235
+    K,,215037.09585525,-23209
+    K,,216037.349647593,-23177
+    K,,217037.607715313,-23143
+    K,,218036.920732973,-23109
+    K,,219036.558002236,-23083
+    K,,220036.199951868,-23060
+    K,,221036.160528837,-23036
+    K,,222035.827033248,-23013
+    K,,223035.187084128,-22989
+    K,,224035.190861045,-22965
+    K,,225034.889432898,-22913
+    K,,226034.283350518,-22851
+    K,,227033.373168882,-22790
+    K,,228033.109435063,-22745
+    K,,229032.230890423,-22706
+    K,,230031.674141541,-22666
+    K,,231031.126667286,-22623
+    K,,232030.899459483,-22579
+    K,,233030.680572351,-22536
+    K,,234029.830049077,-22487
+    K,,235029.937394324,-22436
+    K,,236029.101368415,-22386
+    K,,237028.93354273,-22349
+    K,,238028.796203698,-22321
+    K,,239027.718455779,-22293
+    K,,240027.601775774,-22264
+    K,,241026.852999308,-22234
+    K,,242025.804622356,-22204
+    K,,243025.43437122,-22161
+    K,,244025.410843269,-22111
+    K,,245024.448590425,-22061
+    K,,246023.806141463,-22030
+    K,,247023.789698398,-22006
+    K,,248022.831673844,-21982
+    K,,249021.914817977,-21957
+    K,,250021.961074313,-21933
+    K,,251021.372782648,-21909
+    K,,252020.488759761,-21893
+    K,,253020.2267285,-21878
+    K,,254019.668538885,-21864
+    K,,255019.083436746,-21854
+    K,,256018.811255625,-21845
+    K,,257018.546363113,-21836
+    K,,258018.211531629,-21823
+    K,,259018.185723587,-21807
+    K,,260018.164027122,-21792
+    K,,261017.762181811,-21805
+    K,,262017.018328868,-21824
+    K,,263017.53300199,-21843
+    K,,264017.400569162,-21843
+    K,,265017.57336431,-21838
+    K,,266016.794599693,-21834
+    K,,267016.969724161,-21855
+    K,,268016.496795829,-21882
+    K,,269016.674082028,-21909
+    K,,270016.809991661,-21935
+    K,,271016.643124665,-21961
+    K,,272016.780333747,-21986
+    K,,273016.875123782,-22017
+    K,,274016.970186918,-22048
+    K,,275017.065517385,-22080
+    K,,276017.117769693,-22115
+    K,,277016.520349375,-22152
+    K,,278016.875889877,-22189
+    K,,279016.581696354,-22222
+    K,,280017.543616226,-22253
+    K,,281017.249433624,-22285
+    K,,282017.258418276,-22331
+    K,,283017.267403668,-22381
+    K,,284017.276388668,-22431
+    K,,285017.285373949,-22461
+    K,,286017.29435985,-22486
+    K,,287017.953132535,-22511
+    K,,288017.658972418,-22548
+    K,,289017.36481867,-22587
+    K,,290018.023620268,-22627
+    K,,291017.72948245,-22667
+    K,,292018.388303341,-22707
+    K,,293017.791070082,-22747
+    K,,294018.146818658,-22785
+    K,,295018.502596901,-22822
+    K,,296018.555334025,-22859
+    K,,297018.60812828,-22887
+    K,,298018.660978194,-22914
+    K,,299019.016902377,-22941
+    K,,300018.463841482,-22979
+    K,,301018.213890328,-23019
+    K,,302018.614079592,-23059
+    K,,303018.061402947,-23087
+    K,,304018.461878596,-23113
+    K,,305019.165373101,-23139
+    K,,306018.310219567,-23156
+    K,,307018.711111793,-23171
+    K,,308018.159086892,-23186
+    K,,309019.165802357,-23210
+    K,,310018.916738881,-23235
+    K,,311018.970500345,-23261
+    K,,312019.024303292,-23284
+    K,,313019.078148447,-23307
+    K,,314019.434747194,-23330
+    K,,315019.443703254,-23340
+    K,,316019.452659741,-23348
+    K,,317019.764337875,-23355
+    K,,318019.425680413,-23369
+    K,,319019.737380811,-23384
+    K,,320019.398767108,-23399
+    K,,321020.01324854,-23409
+    K,,322019.977464028,-23420
+    K,,323019.941733965,-23430
+    K,,324019.950711252,-23423
+    K,,325019.959688191,-23413
+    K,,326020.618929541,-23403
+    K,,327020.02233347,-23414
+    K,,328020.37881231,-23430
+    K,,329020.735309669,-23445
+    K,,330020.486320474,-23443
+    K,,331020.887746703,-23438
+    K,,332020.638913961,-23433
+    K,,333020.390146997,-23445
+    K,,334021.094537791,-23461
+    K,,335020.845904848,-23476
+    K,,336020.597335031,-23480
+    K,,337020.651456505,-23482
+    K,,338020.402994783,-23484
+    K,,339021.107711491,-23484
+    K,,340020.556793587,-23484
+    K,,341021.261660524,-23484
+    K,,342020.756439481,-23489
+    K,,343021.20462764,-23494
+    K,,344020.397467842,-23499
+    K,,345020.589713794,-23506
+    K,,346020.782578604,-23513
+    K,,347020.673740715,-23521
+    K,,348021.216573248,-23534
+    K,,349020.504799436,-23547
+    K,,350020.74719376,-23561
+    K,,351020.688441342,-23555
+    K,,352019.979439297,-23544
+    K,,353019.922671629,-23534
+    K,,354020.168812896,-23534
+    K,,355020.114000692,-23537
+    K,,356019.408578128,-23540
+    K,,357019.355655279,-23545
+    K,,358019.605361405,-23550
+    K,,359019.85590874,-23556
+    K,,360018.852284388,-23555
+    K,,361019.104519719,-23552
+    K,,362019.056125151,-23550
+    K,,363018.657912571,-23549
+    K,,364018.561700408,-23549
+    K,,365018.466045405,-23549
+    K,,366019.274726489,-23539
+    K,,367018.477858469,-23527
+    K,,368018.333548227,-23514
+    K,,369019.043083989,-23512
+    K,,370019.100272192,-23512
+    K,,371019.157467186,-23512
+    K,,372019.465873452,-23505
+    K,,373018.8207536,-23496
+    K,,374019.129224519,-23488
+    K,,375019.738958977,-23503
+    K,,376019.395201452,-23523
+    K,,377020.005046397,-23543
+    K,,378020.012398084,-23531
+    K,,379019.718487158,-23512
+    K,,380019.725856345,-23493
+    K,,381019.782934431,-23476
+    K,,382019.840019311,-23460
+    K,,383019.897110348,-23444
+    K,,384019.954208479,-23446
+    K,,385020.011312731,-23451
+    K,,386020.068424045,-23456
+    K,,387020.728040213,-23454
+    K,,388020.434114556,-23452
+    K,,389020.140191091,-23449
+    K,,390020.750070335,-23449
+    K,,391020.406465496,-23450
+    K,,392021.016447241,-23451
+    K,,393020.672951498,-23441
+    K,,394020.63083803,-23429
+    K,,395021.542325441,-23417
+    K,,396021.500376595,-23420
+    K,,397021.458511184,-23426
+    K,,398021.416728556,-23431
+    K,,399021.375027741,-23440
+    K,,400021.98547655,-23451
+    K,,401021.94391644,-23461
+    K,,402021.600985297,-23454
+    K,,403022.211583266,-23445
+    K,,404021.868748659,-23436
+    K,,405022.528471597,-23437
+    K,,406022.585252236,-23441
+    K,,407022.943506226,-23445
+    K,,408022.747958944,-23442
+    K,,409022.903155182,-23438
+    K,,410022.406459905,-23435
+    K,,411022.008694104,-23448
+    K,,412022.565001333,-23465
+    K,,413022.168341696     ,-23481
+    
+    K,,(414000:514000:1000) ,-23481
+/EOF
