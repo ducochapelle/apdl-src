@@ -73,6 +73,24 @@ total_dry_weight = weight_ext_cor_coat + weight_con_coat
 added_mass = (total_dry_weight-weight_buoyancy)+weight_water_absorption
 load_con = 1e-8*g_acc*0.25*pi*(pipe_diameter-2*pipe_wallthk)**2 ! surface area in pipe for content density
 
+! PlidCo, ContainmentClamp, StandoffSleeve
+! wet is including own buoyancy, excluding pipe buoyancy
+! so you can add up dry weights
+! if you naively add up wet weights, you'll be counting buoyancy double
+
+F_pc_wet = g_acc * 0.465 * 0.87 ! these values are super wrong
+F_ik_wet = g_acc * 0.235 * 0.87 ! these values are super wrong
+F_ss_wet = g_acc * 2.600 * 0.87 ! these values are super wrong
+F_pc_dry = g_acc * 0.465
+F_ik_dry = g_acc * 2.235
+F_ss_dry = g_acc * 2.600
+
+! forces that need to be subtracted to make it right
+L_no_coating = 3000
+F_no_coating = (1.633e-6 + 5.819e-4 ) * L_no_coating * g_acc 
+L_dry = 20000
+F_dry = (4.080e-5 + 6.563e-6 + 2.955e-4 + 4.910e5) * L_dry * g_acc
+
 C*** Hydrostatic Pressure
 hyd_pres = water_depth*g_acc*seawater
 
@@ -85,11 +103,12 @@ pres_stp = 6
 pres_int(1) = 2.07, 2.76, 3.45, 4.14, 4.83, 7.93
 
 C*** Configurations
-conf_stp = 5
-! 1 = no clamp
-! 2 = clamp
-! 3 = sleeve
-! 4 etc...
+conf_stp = 4
+! conf 1 Plidco                                    	wet
+! conf 2 Plidco + ik clamp                      	wet
+! conf 3 Plidco + ik clamp                      	dry
+! conf 4 Plidco + ik clamp + S.O.S. (welded)        dry
+! conf 5 Plidco + ik clamp + S.O.S.            	    wet
 
 !===================================================================
 /PREP7 
@@ -264,7 +283,19 @@ VMESH,ALL
 CMSEL,,LP_E
 NSLE
 *GET,node_numbers, NODE,0,COUNT
+
+CMSEL,,LP_E
+NSEL,R,LOC,X,place_1-L_no_coating/2,place_1+L_no_coating/2
+*GET,nn_nc, NODE,0,COUNT
+CM,LP_NC,NODE
+
+CMSEL,,LP_E
+NSEL,R,LOC,X,place_1-L_dry/2,place_1+L_dry/2
+*GET,nn_dry, NODE,0,COUNT
+CM,LP_DRY,NODE
+
 ALLSEL
+
  
 C*** Contact
 ! Setup contact
@@ -371,40 +402,68 @@ ALLSEL
 SOLVE
 
 !-------------------------------------------------------------------
-C*** Load step 5+: Internal pressure 
+C*** Load step 5+: Internal pressure + configurations
 !-------------------------------------------------------------------
+! TODO: 
+! o make the wet and dry weights right, especially when/if adding them together
+! o remove joints every 12 meters     
 
 init_steps = 4 ! number of load steps to skip for post
+flaw = node(place_1,0,0)
+nc = F_no_coating/nn_nc
+dr = F_dry/nn_dry
 
-! conf 1
+! conf 1: wet, plidco 
 *DO,n,1,pres_stp
   SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
-  F,ALL,FY, -pres_int(n)*pipe_length*load_content/node_numbers ! content weight
+  c = pres_int(n)*pipe_length*load_content/node_numbers
+  F,ALL,    FY,        -c               ! content weight
+  F,LP_NC,  FY,    nc  -c               ! no coating
+  F,flaw,   FY,    nc  -c  -F_pc_wet    ! plidco
   SOLVE
 *ENDDO
 
-! conf 2
+! conf 2: wet, plidco, ik clamp
 *DO,n,1,pres_stp
   SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
-  F,ALL,FY, -pres_int(n)*pipe_length*load_content/node_numbers ! content weight
-  ! add force for plidco / removed concrete
+  c = pres_int(n)*pipe_length*load_content/node_numbers
+  F,ALL,    FY,        -c                       ! content weight
+  F,LP_NC,  FY,    nc  -c                       ! no coating
+  F,flaw,   FY,    nc  -c  -F_pc_wet  -F_ik_wet ! plidco
   SOLVE
 *ENDDO
 
-! conf 2
+! conf 3: dry, plidco, ik clamp
 *DO,n,1,pres_stp
   SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
-  F,ALL,FY, -pres_int(n)*pipe_length*load_content/node_numbers ! content weight
-  ! add force for plidco / removed concrete
-  ! a = node(place_1,0,0)
-  ! F,a,FY, ....
-  ! add force for s.o.s.
+  c = pres_int(n)*pipe_length*load_content/node_numbers
+  F,ALL,    FY,        -c                       ! content weight
+  F,LP_DRY, FY, -dr+nc  -c                       ! dry dock
+  F,LP_NC,  FY, -dr+nc  -c                       ! no coating
+  F,flaw,   FY, -dr+nc  -c  -F_pc_dry  -F_ik_dry ! plidco, ik
   SOLVE
 *ENDDO
 
-! conf 3
-! etc...
+! conf 4: dry, plidco, ik clamp, sos
+*DO,n,1,pres_stp
+  SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
+  c = pres_int(n)*pipe_length*load_content/node_numbers
+  F,ALL,    FY,        -c                                   ! content weight
+  F,LP_DRY, FY, -dr+nc  -c                                   ! dry dock
+  F,LP_NC,  FY, -dr+nc  -c                                   ! no coating
+  F,flaw,   FY, -dr+nc  -c  -F_pc_dry  -F_ik_dry -F_ss_dry   ! plidco, ik, sos
+  SOLVE
+*ENDDO
 
+! conf 5: wet, plidco, ik clamp, sos
+*DO,n,1,pres_stp
+  SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
+  c = pres_int(n)*pipe_length*load_content/node_numbers
+  F,ALL,    FY,        -c                                   ! content weight
+  F,LP_NC,  FY,    nc  -c                                   ! no coating
+  F,flaw,   FY,    nc  -c  -F_pc_wet  -F_ik_wet -F_ss_dry   ! plidco
+  SOLVE
+*ENDDO
 
 !===================================================================
 /POST1
@@ -425,6 +484,7 @@ CMSEL,S,LP_E
 /SHOW, PNG, png
 PNGR, DEFAULT
 
+old_init_steps = init_steps
 *DO,m,1,conf_stp
     ! X: add location and displacement, convert to meters
     ETABLE,ux, U, X
@@ -483,14 +543,17 @@ PNGR, DEFAULT
     argument(1) = 'SDIR', 'SMISC', '31','SByT', 'SMISC', '33'
     /INPUT,main,mac,,:FUN2_PLOT
     /SHOW, CLOSE
+    init_steps = init_steps + pres_steps
+*ENDDO
+init_steps = old_init_steps
     
-    C*** Get node displacements around crack
-    a=node(place_1-5000,0,0)
-    b=node(place_1+5000,0,0)
-    *CFOPEN,displacement,txt
-    *DIM, us, ARRAY, pres_stp, 6
-    *DO, n, 1, pres_stp
-        SET, n+init_steps, LAST
+C*** Get node displacements around crack
+a=node(place_1-5000,0,0)
+b=node(place_1+5000,0,0)
+*DIM, us, ARRAY, 6, pres_stp, conf_stp
+*DO, n, 1, pres_stp
+    *DO, m, 1, conf_stp
+        SET, init_steps+m*pres_stp+n, LAST
         *GET,aux, NODE, a, U, X
         *GET,auy, NODE, a, U, Y
         *GET,auz, NODE, a, U, Z
@@ -504,12 +567,8 @@ PNGR, DEFAULT
         *GET,broty, NODE, b, ROT, Y
         *GET,brotz, NODE, b, ROT, Z
         C*** aux, auy, arotz, bux, buy, brotz 
-        us(1,n) =  0, 0, -arotz*180/pi, bux-aux, buy-auy, -brotz*180/pi
-        *VWRITE,us(1,n) ,us(2,n),us(3,n),us(4,n),us(5,n),us(6,n)
-    (G16.8,G16.8,G16.8,G16.8,G16.8,G16.8)
+        us(1,n,m) =  0, 0, -arotz*180/pi, bux-aux, buy-auy, -brotz*180/pi
     *ENDDO
-    *CFCLOS
-    init_steps = init_steps + pres_steps
 *ENDDO
 
     
