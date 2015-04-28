@@ -543,7 +543,7 @@ old_init_steps = init_steps
     argument(1) = 'SDIR', 'SMISC', '31','SByT', 'SMISC', '33'
     /INPUT,main,mac,,:FUN2_PLOT
     /SHOW, CLOSE
-    init_steps = init_steps + pres_steps
+    init_steps = init_steps + pres_stp
 *ENDDO
 init_steps = old_init_steps
     
