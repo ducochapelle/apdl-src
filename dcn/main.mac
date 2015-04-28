@@ -103,12 +103,12 @@ pres_stp = 6
 pres_int(1) = 2.07, 2.76, 3.45, 4.14, 4.83, 7.93
 
 C*** Configurations
-conf_stp = 4
 ! conf 1 Plidco                                    	wet
 ! conf 2 Plidco + ik clamp                      	wet
 ! conf 3 Plidco + ik clamp                      	dry
 ! conf 4 Plidco + ik clamp + S.O.S. (welded)        dry
 ! conf 5 Plidco + ik clamp + S.O.S.            	    wet
+conf_stp = 5
 
 !===================================================================
 /PREP7 
