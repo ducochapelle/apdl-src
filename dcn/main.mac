@@ -279,17 +279,20 @@ C*** Mesh
 LESIZE,1,pipe_nl
 LMESH,line_pipe
 CM,LP_E,ELEM
+CM,LP_N,NODE
 VMESH,ALL
 CMSEL,,LP_E
 NSLE
 *GET,node_numbers, NODE,0,COUNT
 
 CMSEL,,LP_E
+NSLE
 NSEL,R,LOC,X,place_1-L_no_coating/2,place_1+L_no_coating/2
 *GET,nn_nc, NODE,0,COUNT
 CM,LP_NC,NODE
 
 CMSEL,,LP_E
+NSLE
 NSEL,R,LOC,X,place_1-L_dry/2,place_1+L_dry/2
 *GET,nn_dry, NODE,0,COUNT
 CM,LP_DRY,NODE
@@ -417,7 +420,7 @@ dr = F_dry/nn_dry
 *DO,n,1,pres_stp
   SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
   c = pres_int(n)*pipe_length*load_content/node_numbers
-  F,ALL,    FY,        -c               ! content weight
+  F,LP_N,    FY,        -c               ! content weight
   F,LP_NC,  FY,    nc  -c               ! no coating
   F,flaw,   FY,    nc  -c  -F_pc_wet    ! plidco
   SOLVE
@@ -427,7 +430,7 @@ dr = F_dry/nn_dry
 *DO,n,1,pres_stp
   SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
   c = pres_int(n)*pipe_length*load_content/node_numbers
-  F,ALL,    FY,        -c                       ! content weight
+  F,LP_N,    FY,        -c                       ! content weight
   F,LP_NC,  FY,    nc  -c                       ! no coating
   F,flaw,   FY,    nc  -c  -F_pc_wet  -F_ik_wet ! plidco
   SOLVE
@@ -437,7 +440,7 @@ dr = F_dry/nn_dry
 *DO,n,1,pres_stp
   SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
   c = pres_int(n)*pipe_length*load_content/node_numbers
-  F,ALL,    FY,        -c                       ! content weight
+  F,LP_N,    FY,        -c                       ! content weight
   F,LP_DRY, FY, -dr+nc  -c                       ! dry dock
   F,LP_NC,  FY, -dr+nc  -c                       ! no coating
   F,flaw,   FY, -dr+nc  -c  -F_pc_dry  -F_ik_dry ! plidco, ik
@@ -448,7 +451,7 @@ dr = F_dry/nn_dry
 *DO,n,1,pres_stp
   SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
   c = pres_int(n)*pipe_length*load_content/node_numbers
-  F,ALL,    FY,        -c                                   ! content weight
+  F,LP_N,    FY,        -c                                   ! content weight
   F,LP_DRY, FY, -dr+nc  -c                                   ! dry dock
   F,LP_NC,  FY, -dr+nc  -c                                   ! no coating
   F,flaw,   FY, -dr+nc  -c  -F_pc_dry  -F_ik_dry -F_ss_dry   ! plidco, ik, sos
@@ -459,7 +462,7 @@ dr = F_dry/nn_dry
 *DO,n,1,pres_stp
   SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
   c = pres_int(n)*pipe_length*load_content/node_numbers
-  F,ALL,    FY,        -c                                   ! content weight
+  F,LP_N,    FY,        -c                                   ! content weight
   F,LP_NC,  FY,    nc  -c                                   ! no coating
   F,flaw,   FY,    nc  -c  -F_pc_wet  -F_ik_wet -F_ss_dry   ! plidco
   SOLVE
