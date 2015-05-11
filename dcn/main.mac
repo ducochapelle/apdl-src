@@ -63,6 +63,10 @@ soil_v              = 0.3       ! [-]
 steel_E             = 207e3     ! [MPa]
 steel_v             = 0.3       ! [-]
 soil_mu             = 0.05      ! [-]
+! Post repair material
+weight_pc 	    = 0.465	! [tonne]
+weight_ik 	    = 2.235	! [tonne]
+weight_ss           = 2.600	! [tonne]
 
 C*** Added Mass
 weight_con_coat = (((pipe_diameter+2*ext_cor_coat_thk+2*con_coat_thk)**2)-((pipe_diameter+2*ext_cor_coat_thk)**2))*pi*0.25*concrete_coating
@@ -72,24 +76,39 @@ weight_water_absorption= (weight_con_coat*absorption)/(concrete_coating/seawater
 total_dry_weight = weight_ext_cor_coat + weight_con_coat 
 added_mass = (total_dry_weight-weight_buoyancy)+weight_water_absorption
 load_con = 1e-8*g_acc*0.25*pi*(pipe_diameter-2*pipe_wallthk)**2 ! surface area in pipe for content density
+con_st_water = 1-(seawater/steel)
+
+C*** Buoyancy Mass
+buoy_pipe_st = (pipe_diameter**2-(2*pipe_wallthk)**2)*pi*0.25*seawater
+buoy_weight_ext_cor_coat = ((pipe_diameter+2*ext_cor_coat_thk)**2-pipe_diameter**2)*pi*0.25*seawater
+buoy_weight_con_coat = (((pipe_diameter+2*ext_cor_coat_thk+2*con_coat_thk)**2)-((pipe_diameter+2*ext_cor_coat_thk)**2))*pi*0.25*seawater
+buoy_content = seawater*0.25*pi*(pipe_diameter-(2*pipe_wallthk))**2 
+total_buoy = buoy_pipe_st + buoy_weight_ext_cor_coat + buoy_weight_con_coat + buoy_content  
+
+C*** Net Mass
+net_ext_cor_coat = weight_ext_cor_coat - buoy_weight_ext_cor_coat 
+net_con_coat = weight_con_coat - buoy_weight_con_coat
+
+! The corrosion coating, concrete coating and water absorption is the weight that is taken off from the pipe.
+mass_no_coating = net_ext_cor_coat + net_con_coat + weight_water_absorption   
 
 ! PlidCo, ContainmentClamp, StandoffSleeve
 ! wet is including own buoyancy, excluding pipe buoyancy
 ! so you can add up dry weights
 ! if you naively add up wet weights, you'll be counting buoyancy double
 
-F_pc_wet = g_acc * 0.465 * 0.87 ! these values are super wrong
-F_ik_wet = g_acc * 0.235 * 0.87 ! these values are super wrong
-F_ss_wet = g_acc * 2.600 * 0.87 ! these values are super wrong
-F_pc_dry = g_acc * 0.465
-F_ik_dry = g_acc * 2.235
-F_ss_dry = g_acc * 2.600
+F_pc_wet = weight_pc - ((weight_pc/steel)*seawater) * g_acc 
+F_ik_wet = weight_ik - ((weight_ik/steel)*seawater) * g_acc 
+F_ss_wet = weight_ss - ((weight_ss/steel)*seawater) * g_acc 
+F_pc_dry = weight_pc * g_acc
+F_ik_dry = weight_ik * g_acc
+F_ss_dry = weight_ss * g_acc
 
 ! forces that need to be subtracted to make it right
 L_no_coating = 3000
-F_no_coating = (1.633e-6 + 5.819e-4 ) * L_no_coating * g_acc 
-L_dry = 20000
-F_dry = (4.080e-5 + 6.563e-6 + 2.955e-4 + 4.910e5) * L_dry * g_acc
+F_no_coating = mass_no_coating * L_no_coating * g_acc 
+L_dry = 6000 ! length of habitat
+F_dry = total_buoy * L_dry * g_acc
 
 C*** Hydrostatic Pressure
 hyd_pres = water_depth*g_acc*seawater
@@ -106,8 +125,8 @@ C*** Configurations
 ! conf 1 Plidco                                    	wet
 ! conf 2 Plidco + ik clamp                      	wet
 ! conf 3 Plidco + ik clamp                      	dry
-! conf 4 Plidco + ik clamp + S.O.S. (welded)        dry
-! conf 5 Plidco + ik clamp + S.O.S.            	    wet
+! conf 4 Plidco + ik clamp + S.O.S. (welded)            dry
+! conf 5 Plidco + ik clamp + S.O.S.            	        wet
 conf_stp = 5
 
 !===================================================================
@@ -420,9 +439,9 @@ dr = F_dry/nn_dry
 *DO,n,1,pres_stp
   SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
   c = pres_int(n)*pipe_length*load_content/node_numbers
-  F,LP_N,    FY,        -c               ! content weight
+  F,LP_N,   FY,        -c               ! content weight
   F,LP_NC,  FY,    nc  -c               ! no coating
-  F,flaw,   FY,    nc  -c  -F_pc_wet    ! plidco
+  F,flaw,   FY,    nc  -c  +F_pc_wet    ! plidco
   SOLVE
 *ENDDO
 
@@ -430,9 +449,9 @@ dr = F_dry/nn_dry
 *DO,n,1,pres_stp
   SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
   c = pres_int(n)*pipe_length*load_content/node_numbers
-  F,LP_N,    FY,        -c                       ! content weight
+  F,LP_N,   FY,        -c                       ! content weight
   F,LP_NC,  FY,    nc  -c                       ! no coating
-  F,flaw,   FY,    nc  -c  -F_pc_wet  -F_ik_wet ! plidco
+  F,flaw,   FY,    nc  -c  +F_pc_dry  +F_ik_wet ! plidco, ik
   SOLVE
 *ENDDO
 
@@ -440,10 +459,10 @@ dr = F_dry/nn_dry
 *DO,n,1,pres_stp
   SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
   c = pres_int(n)*pipe_length*load_content/node_numbers
-  F,LP_N,    FY,        -c                       ! content weight
+  F,LP_N,   FY,         -c                       ! content weight
   F,LP_DRY, FY, -dr+nc  -c                       ! dry dock
   F,LP_NC,  FY, -dr+nc  -c                       ! no coating
-  F,flaw,   FY, -dr+nc  -c  -F_pc_dry  -F_ik_dry ! plidco, ik
+  F,flaw,   FY, -dr+nc  -c  +F_pc_dry  +F_ik_dry ! plidco, ik
   SOLVE
 *ENDDO
 
@@ -451,10 +470,10 @@ dr = F_dry/nn_dry
 *DO,n,1,pres_stp
   SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
   c = pres_int(n)*pipe_length*load_content/node_numbers
-  F,LP_N,    FY,        -c                                   ! content weight
+  F,LP_N,   FY,         -c                                   ! content weight
   F,LP_DRY, FY, -dr+nc  -c                                   ! dry dock
   F,LP_NC,  FY, -dr+nc  -c                                   ! no coating
-  F,flaw,   FY, -dr+nc  -c  -F_pc_dry  -F_ik_dry -F_ss_dry   ! plidco, ik, sos
+  F,flaw,   FY, -dr+nc  -c  +F_pc_dry  +F_ik_dry +F_ss_dry   ! plidco, ik, sos
   SOLVE
 *ENDDO
 
@@ -462,9 +481,9 @@ dr = F_dry/nn_dry
 *DO,n,1,pres_stp
   SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
   c = pres_int(n)*pipe_length*load_content/node_numbers
-  F,LP_N,    FY,        -c                                   ! content weight
+  F,LP_N,   FY,        -c                                   ! content weight
   F,LP_NC,  FY,    nc  -c                                   ! no coating
-  F,flaw,   FY,    nc  -c  -F_pc_wet  -F_ik_wet -F_ss_dry   ! plidco
+  F,flaw,   FY,    nc  -c  +F_pc_dry  +F_ik_dry +F_ss_wet   ! plidco, ik, sos
   SOLVE
 *ENDDO
 
@@ -497,10 +516,10 @@ old_init_steps = init_steps
     *VOPER, graph(1,1), graph(1,1),ADD,137741
     /XRANGE, 137900, 138100
     
-    
+
     /AXLAB,Y,Height [mm]
     /AXLAB,X,Location [m]
-    /YRANGE, -2.6e4, -2e4
+    /YRANGE, -2.360e4, -2.120e4
     argument(1) = 'uy', 'U', 'Y','centy', 'CENT', 'Y'
     /INPUT,main,mac,,:FUN2_PLOT
     
@@ -545,9 +564,9 @@ old_init_steps = init_steps
     /YRANGE, -2.5e2, 2.0e2
     argument(1) = 'SDIR', 'SMISC', '31','SByT', 'SMISC', '33'
     /INPUT,main,mac,,:FUN2_PLOT
-    /SHOW, CLOSE
     init_steps = init_steps + pres_stp
 *ENDDO
+/SHOW, CLOSE
 init_steps = old_init_steps
     
 C*** Get node displacements around crack
@@ -556,7 +575,7 @@ b=node(place_1+5000,0,0)
 *DIM, us, ARRAY, 6, pres_stp, conf_stp
 *DO, n, 1, pres_stp
     *DO, m, 1, conf_stp
-        SET, init_steps+m*pres_stp+n, LAST
+        SET, init_steps+(m-1)*pres_stp+n, LAST
         *GET,aux, NODE, a, U, X
         *GET,auy, NODE, a, U, Y
         *GET,auz, NODE, a, U, Z
