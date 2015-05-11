@@ -588,11 +588,12 @@ b=node(place_1+5000,0,0)
         *GET,brotx, NODE, b, ROT, X
         *GET,broty, NODE, b, ROT, Y
         *GET,brotz, NODE, b, ROT, Z
-        C*** aux, auy, arotz, bux, buy, brotz 
+        ! aux, auy, arotz, bux, buy, brotz 
         us(1,n,m) =  0, 0, -arotz*180/pi, bux-aux, buy-auy, -brotz*180/pi
     *ENDDO
 *ENDDO
-
+*MWRITE, us, us,csv,,ijk
+(6F10.3)
     
 C*** Clean up, the images
 /SYS, i_view32 *.png /invert /convert=*.png
