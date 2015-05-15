@@ -326,7 +326,7 @@ b = node(place_1+w_ss/2,0,0)
 NSEL,NONE
 NSEL,a,a
 NSEL,a,b
-CM,LP_SOS
+CM,LP_SOS,NODE
 
 ALLSEL
 
