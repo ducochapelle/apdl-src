@@ -93,16 +93,22 @@ net_con_coat = weight_con_coat - buoy_weight_con_coat
 mass_no_coating = net_ext_cor_coat + net_con_coat + weight_water_absorption   
 
 ! PlidCo, ContainmentClamp, StandoffSleeve
-! wet is including own buoyancy, excluding pipe buoyancy
-! so you can add up dry weights
-! if you naively add up wet weights, you'll be counting buoyancy double
 
-F_pc_wet = weight_pc - ((weight_pc/steel)*seawater) * g_acc 
-F_ik_wet = weight_ik - ((weight_ik/steel)*seawater) * g_acc 
-F_ss_wet = weight_ss - ((weight_ss/steel)*seawater) * g_acc 
+D_pc = 1008 ! [mm]
+D_ik = 1400 ! [mm]
+V_ss = 2860113129 ! [mm3]
+W_pc =  365 ! [mm]
+W_ik =  855 ! [mm]
+W_ss = 1900 ! [mm]
+
+
 F_pc_dry = weight_pc * g_acc
 F_ik_dry = weight_ik * g_acc
 F_ss_dry = weight_ss * g_acc
+F_pc_wet = (F_pc_dry - pi/4*D_pc**2*W_pc*seawater) * g_acc 
+F_ik_wet = (F_ik_dry - pi/4*D_ik**2*W_ik*seawater) * g_acc 
+F_ss_wet = (F_ss_dry -              V_ss*seawater) * g_acc 
+
 
 ! forces that need to be subtracted to make it right
 L_no_coating = 3000
@@ -122,12 +128,12 @@ pres_stp = 6
 pres_int(1) = 2.07, 2.76, 3.45, 4.14, 4.83, 7.93
 
 C*** Configurations
-! conf 1 Plidco                                    	wet
-! conf 2 Plidco + ik clamp                      	wet
-! conf 3 Plidco + ik clamp                      	dry
-! conf 4 Plidco + ik clamp + S.O.S. (welded)            dry
-! conf 5 Plidco + ik clamp + S.O.S.            	        wet
-conf_stp = 5
+conf_stp = 1 ! Plidco                                   wet
+conf_stp = 2 ! Plidco + ik clamp                      	wet
+conf_stp = 3 ! Plidco + ik clamp                      	dry
+conf_stp = 4 ! Plidco + ik clamp + S.O.S. (welded)      dry
+conf_stp = 5 ! Plidco + ik clamp + S.O.S.            	wet
+
 
 !===================================================================
 /PREP7 
@@ -304,17 +310,23 @@ CMSEL,,LP_E
 NSLE
 *GET,node_numbers, NODE,0,COUNT
 
-CMSEL,,LP_E
-NSLE
+CMSEL,,LP_N
 NSEL,R,LOC,X,place_1-L_no_coating/2,place_1+L_no_coating/2
 *GET,nn_nc, NODE,0,COUNT
 CM,LP_NC,NODE
 
-CMSEL,,LP_E
-NSLE
+CMSEL,,LP_N
 NSEL,R,LOC,X,place_1-L_dry/2,place_1+L_dry/2
 *GET,nn_dry, NODE,0,COUNT
 CM,LP_DRY,NODE
+
+CMSEL,,LP_N
+a = node(place_1-W_ss/2,0,0)
+b = node(place_1+w_ss/2,0,0)
+NSEL,NONE
+NSEL,a,a
+NSEL,a,b
+CM,LP_SOS
 
 ALLSEL
 
@@ -427,8 +439,9 @@ SOLVE
 C*** Load step 5+: Internal pressure + configurations
 !-------------------------------------------------------------------
 ! TODO: 
-! o make the wet and dry weights right, especially when/if adding them together
+! x make the wet and dry weights right, especially when/if adding them together
 ! o remove joints every 12 meters     
+
 
 init_steps = 4 ! number of load steps to skip for post
 flaw = node(place_1,0,0)
@@ -441,7 +454,7 @@ dr = F_dry/nn_dry
   c = pres_int(n)*pipe_length*load_content/node_numbers
   F,LP_N,   FY,        -c               ! content weight
   F,LP_NC,  FY,    nc  -c               ! no coating
-  F,flaw,   FY,    nc  -c  +F_pc_wet    ! plidco
+  F,flaw,   FY,    nc  -c  -F_pc_wet    ! plidco
   SOLVE
 *ENDDO
 
@@ -451,7 +464,7 @@ dr = F_dry/nn_dry
   c = pres_int(n)*pipe_length*load_content/node_numbers
   F,LP_N,   FY,        -c                       ! content weight
   F,LP_NC,  FY,    nc  -c                       ! no coating
-  F,flaw,   FY,    nc  -c  +F_pc_dry  +F_ik_wet ! plidco, ik
+  F,flaw,   FY,    nc  -c  -F_pc_dry  -F_ik_wet ! plidco, ik
   SOLVE
 *ENDDO
 
@@ -462,7 +475,7 @@ dr = F_dry/nn_dry
   F,LP_N,   FY,         -c                       ! content weight
   F,LP_DRY, FY, -dr+nc  -c                       ! dry dock
   F,LP_NC,  FY, -dr+nc  -c                       ! no coating
-  F,flaw,   FY, -dr+nc  -c  +F_pc_dry  +F_ik_dry ! plidco, ik
+  F,flaw,   FY, -dr+nc  -c  -F_pc_dry  -F_ik_dry ! plidco, ik
   SOLVE
 *ENDDO
 
@@ -470,10 +483,11 @@ dr = F_dry/nn_dry
 *DO,n,1,pres_stp
   SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
   c = pres_int(n)*pipe_length*load_content/node_numbers
-  F,LP_N,   FY,         -c                                   ! content weight
-  F,LP_DRY, FY, -dr+nc  -c                                   ! dry dock
-  F,LP_NC,  FY, -dr+nc  -c                                   ! no coating
-  F,flaw,   FY, -dr+nc  -c  +F_pc_dry  +F_ik_dry +F_ss_dry   ! plidco, ik, sos
+  F,LP_N,   FY,         -c                         ! content weight
+  F,LP_DRY, FY, -dr+nc  -c                         ! dry dock
+  F,LP_NC,  FY, -dr+nc  -c                         ! no coating
+  F,LP_SOS, FY, -dr+nc  -c  -F_ss_dry/2            ! sos, on two nodes
+  F,flaw,   FY, -dr+nc  -c  -F_pc_dry  -F_ik_dry   ! plidco, ik, on one node
   SOLVE
 *ENDDO
 
@@ -481,9 +495,10 @@ dr = F_dry/nn_dry
 *DO,n,1,pres_stp
   SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
   c = pres_int(n)*pipe_length*load_content/node_numbers
-  F,LP_N,   FY,        -c                                   ! content weight
-  F,LP_NC,  FY,    nc  -c                                   ! no coating
-  F,flaw,   FY,    nc  -c  +F_pc_dry  +F_ik_dry +F_ss_wet   ! plidco, ik, sos
+  F,LP_N,   FY,        -c                       ! content weight
+  F,LP_NC,  FY,    nc  -c                       ! no coating
+  F,LP_SOS, FY,    nc  -c  -F_ss_wet/2          ! sos
+  F,flaw,   FY,    nc  -c  -F_pc_dry  -F_ik_dry ! plidco, ik
   SOLVE
 *ENDDO
 
