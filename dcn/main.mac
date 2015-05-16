@@ -324,8 +324,8 @@ CMSEL,,LP_N
 a = node(place_1-W_ss/2,0,0)
 b = node(place_1+w_ss/2,0,0)
 NSEL,NONE
-NSEL,a,a
-NSEL,a,b
+NSEL,a,,,a
+NSEL,a,,,b
 CM,LP_SOS,NODE
 
 ALLSEL
