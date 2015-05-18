@@ -473,7 +473,7 @@ dr = F_dry/nn_dry
   SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
   c = pres_int(n)*pipe_length*load_content/node_numbers
   F,LP_N,   FY,         -c                       ! content weight
-  F,LP_DRY, FY, -dr+nc  -c                       ! dry dock
+  F,LP_DRY, FY, -dr     -c                       ! dry dock
   F,LP_NC,  FY, -dr+nc  -c                       ! no coating
   F,flaw,   FY, -dr+nc  -c  -F_pc_dry  -F_ik_dry ! plidco, ik
   SOLVE
@@ -484,7 +484,7 @@ dr = F_dry/nn_dry
   SFE,LP_E,1,PRES,1, pres_int(n) ! internal pressure
   c = pres_int(n)*pipe_length*load_content/node_numbers
   F,LP_N,   FY,         -c                         ! content weight
-  F,LP_DRY, FY, -dr+nc  -c                         ! dry dock
+  F,LP_DRY, FY, -dr     -c                         ! dry dock
   F,LP_NC,  FY, -dr+nc  -c                         ! no coating
   F,LP_SOS, FY, -dr+nc  -c  -F_ss_dry/2            ! sos, on two nodes
   F,flaw,   FY, -dr+nc  -c  -F_pc_dry  -F_ik_dry   ! plidco, ik, on one node
