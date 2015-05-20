@@ -102,19 +102,19 @@ W_ik =  855 ! [mm]
 W_ss = 1900 ! [mm]
 
 
-F_pc_dry = weight_pc * g_acc
-F_ik_dry = weight_ik * g_acc
-F_ss_dry = weight_ss * g_acc
-F_pc_wet = (weight_pc - pi/4*D_pc**2*W_pc*seawater) * g_acc 
-F_ik_wet = (weight_ik - pi/4*D_ik**2*W_ik*seawater) * g_acc 
-F_ss_wet = (weight_ss -              V_ss*seawater) * g_acc 
+F_pc_dry = weight_pc*g_acc
+F_ik_dry = weight_ik*g_acc
+F_ss_dry = weight_ss*g_acc
+F_pc_wet = (weight_pc - pi/4*D_pc**2*W_pc*seawater)*g_acc 
+F_ik_wet = (weight_ik - pi/4*D_ik**2*W_ik*seawater)*g_acc 
+F_ss_wet = (weight_ss -              V_ss*seawater)*g_acc 
 
 
 ! forces that need to be subtracted to make it right
 L_no_coating = 3000
-F_no_coating = mass_no_coating * L_no_coating * g_acc 
+F_no_coating = mass_no_coating*L_no_coating*g_acc 
 L_dry = 6000 ! length of habitat
-F_dry = total_buoy * L_dry * g_acc
+F_dry = total_buoy*L_dry*g_acc
 
 C*** Hydrostatic Pressure
 hyd_pres = water_depth*g_acc*seawater
