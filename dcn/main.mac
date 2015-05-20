@@ -75,14 +75,12 @@ weight_buoyancy = ((pipe_diameter+2*ext_cor_coat_thk+2*con_coat_thk)**2)*0.25*pi
 weight_water_absorption= (weight_con_coat*absorption)/(concrete_coating/seawater)
 total_dry_weight = weight_ext_cor_coat + weight_con_coat 
 added_mass = (total_dry_weight-weight_buoyancy)+weight_water_absorption
-load_con = 1e-8*g_acc*0.25*pi*(pipe_diameter-2*pipe_wallthk)**2 ! surface area in pipe for content density
-con_st_water = 1-(seawater/steel)
 
 C*** Buoyancy Mass
-buoy_pipe_st = (pipe_diameter**2-(2*pipe_wallthk)**2)*pi*0.25*seawater
+buoy_pipe_st = (pipe_diameter**2-(pipe_diameter-2*pipe_wallthk)**2)*pi*0.25*seawater
 buoy_weight_ext_cor_coat = ((pipe_diameter+2*ext_cor_coat_thk)**2-pipe_diameter**2)*pi*0.25*seawater
 buoy_weight_con_coat = (((pipe_diameter+2*ext_cor_coat_thk+2*con_coat_thk)**2)-((pipe_diameter+2*ext_cor_coat_thk)**2))*pi*0.25*seawater
-buoy_content = seawater*0.25*pi*(pipe_diameter-(2*pipe_wallthk))**2 
+buoy_content = seawater*0.25*pi*(pipe_diameter-2*pipe_wallthk)**2 
 total_buoy = buoy_pipe_st + buoy_weight_ext_cor_coat + buoy_weight_con_coat + buoy_content  
 
 C*** Net Mass
