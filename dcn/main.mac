@@ -511,6 +511,10 @@ CMSEL,S,LP_E
 *GET,elem_count,ELEM,0,COUNT
 *DIM,graph, TABLE, elem_count, pres_stp+1
 *DIM, argument, CHAR, 6
+*DO,n,1,6,1
+    /COLOR, CURVE, n*2,n
+*ENDDO
+
 *DO, n, 1, pres_stp, 
   /GCOLUMN, n, LC_%n%
 *ENDDO
@@ -579,8 +583,71 @@ old_init_steps = init_steps
     /INPUT,main,mac,,:FUN2_PLOT
     init_steps = init_steps + pres_stp
 *ENDDO
-/SHOW, CLOSE
 init_steps = old_init_steps
+
+! Following pictures arrange different configurations of the same 
+! pressure in one graph. Above pictures do the opposite.
+
+*DO, n, 1, conf_stp, 
+  /GCOLUMN, n, CONF_%n%
+*ENDDO
+
+ETABLE,ux, U, X
+ETABLE,centx, CENT, X
+SADD,locx, ux, centx, 1/1000, 1/1000, 0 
+*VGET, graph(1,1), ELEM, all, ETAB, locx
+*VOPER, graph(1,1), graph(1,1),ADD,137741
+/XRANGE, 137900, 138100
+
+/AXLAB,Y,Height [mm]
+/AXLAB,X,Location [m]
+/YRANGE, -2.360e4, -2.120e4
+argument(1) = 'uy', 'U', 'Y','centy', 'CENT', 'Y'
+/INPUT,main,mac,,:FUN3_PLOT
+
+/AXLAB,Y,Bending moment [Nmm]
+/AXLAB,X,Location [m]
+/YRANGE, -2.35e9, 1.0e9
+argument(1) = 'Mz1', 'SMISC', '3', '', '', ''
+/INPUT,main,mac,,:FUN3_PLOT
+
+/AXLAB,Y,Normal Stress [MPa]
+/AXLAB,X,Location [m]
+/YRANGE, 0, 80
+argument(1) = 'SDIR', 'SMISC', '31', '', '', ''
+/INPUT,main,mac,,:FUN3_PLOT
+
+/AXLAB,Y,Bending Stress Top [MPa]
+/AXLAB,X,Location [m]
+/YRANGE, -1.1e2, 2.7e2
+argument(1) = 'SByT', 'SMISC', '32', '', '', ''
+/INPUT,main,mac,,:FUN3_PLOT
+
+/AXLAB,Y,Bending Stress Bottom [MPa]
+/AXLAB,X,Location [m]
+/YRANGE, -2.7e2, 1.1e2
+argument(1) = 'SByB', 'SMISC', '33', '', '', ''
+/INPUT,main,mac,,:FUN3_PLOT
+
+/AXLAB,Y,Hoop Stress [MPa]
+/AXLAB,X,Location [m]
+/YRANGE, 0, 2e2
+argument(1) = 'Mhs1', 'SMISC', '64', '', '', ''
+/INPUT,main,mac,,:FUN3_PLOT
+
+/AXLAB,Y,Axial Stress Top [MPa]
+/AXLAB,X,Location [m]
+/YRANGE, -1.5e2, 3.0e2
+argument(1) = 'SDIR', 'SMISC', '31','SByT', 'SMISC', '32'
+/INPUT,main,mac,,:FUN3_PLOT
+
+/AXLAB,Y,Axial Stress Bottom [MPa]
+/AXLAB,X,Location [m]
+/YRANGE, -2.5e2, 2.0e2
+argument(1) = 'SDIR', 'SMISC', '31','SByT', 'SMISC', '33'
+/INPUT,main,mac,,:FUN3_PLOT
+
+/SHOW, CLOSE
     
 C*** Get node displacements around crack
 a=node(place_1-5000,0,0)
@@ -638,6 +705,19 @@ C*** FUNCTIONS
         *VGET, graph(1,n+1), ELEM, all, ETAB, temp
     *ENDDO
     *VPLOT, graph(1,1), graph(1,2), 3, 4, 5, 6, 7
+/EOF
+
+:FUN3_PLOT
+    *DO,n,1,pres_stp
+        *DO,m,1,conf_stp
+            set, init_steps+(m-1)*pres_stp+n, last   
+            ETABLE,argument(1), argument(2), argument(3)
+            ETABLE,argument(4), argument(5), argument(6)
+            SADD, temp, argument(1), argument(4), 1, 1, 0   
+            *VGET, graph(1,m+1), ELEM, all, ETAB, temp
+        *ENDDO
+        *VPLOT, graph(1,1), graph(1,2), 3, 4, 5, 6
+    *ENDDO
 /EOF
 
 :FUN_SOIL
