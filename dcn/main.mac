@@ -46,6 +46,8 @@ g_acc               = 9806      ! Gravitational acceleration [mm/s^2]
 water_depth         = 24500     ! Used ad-hoc, for below-soil coordinates
 seabed_width        = 5000
 seabed_thickness    = 1000
+l_fj                = 12200     ! length of one joint
+l_cb                = 600       ! length of cut back
 
 C*** Material Properties
 ! Densities [tonne/mm3]
@@ -73,8 +75,8 @@ weight_con_coat = (((pipe_diameter+2*ext_cor_coat_thk+2*con_coat_thk)**2)-((pipe
 weight_ext_cor_coat = ((pipe_diameter+2*ext_cor_coat_thk)**2-pipe_diameter**2)*pi*0.25*ext_cor_coat
 weight_buoyancy = ((pipe_diameter+2*ext_cor_coat_thk+2*con_coat_thk)**2)*0.25*pi*seawater
 weight_water_absorption= (weight_con_coat*absorption)/(concrete_coating/seawater)
-total_dry_weight = weight_ext_cor_coat + weight_con_coat 
-added_mass = (total_dry_weight-weight_buoyancy)+weight_water_absorption
+weight_fjc = ((pipe_diameter+2*ext_cor_coat_thk+2*con_coat_thk)**2 - pipe_diameter**2)*pi*0.25*seawater
+added_mass = (1-l_cb/l_fj)*(weight_ext_cor_coat + weight_con_coat + weight_water_absorption) + l_cb/l_fj*weight_fjc - weight_buoyancy
 
 C*** Buoyancy Mass
 buoy_pipe_st = (pipe_diameter**2-(pipe_diameter-2*pipe_wallthk)**2)*pi*0.25*seawater
