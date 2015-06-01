@@ -684,7 +684,6 @@ C*** Clean up, the images
 /SYS, move *.png images
 
 ! get all rforces of all supports
-/post1
 *do,m,5,34
   set,m, last
   *do,n,2,7
@@ -712,6 +711,21 @@ C*** Clean up, the images
 !    a.write('{0}, {1}\n'.format(m,c))
 ! # END OF SCRIPT
 /SYS, python rforce.py
+
+! get vertical movement of pipe around crack
+cmsel,,lp_n 
+*SET,node_1 , node(place_1-3000,0,0)
+*SET,node_2 , node(place_1     ,0,0) 
+*SET,node_3 , node(place_1+3000,0,0)
+*DIM, vmopt, array, 34,3
+*DO,n,1,34
+  *DO,i,1,3
+    SET,n
+    *GET,vmopt(n,%i%),NODE,node_%i%,U,Y
+  *ENDDO
+*ENDDO  
+*MWRITE, vmopt, vmopt,csv,,jik
+(3F10.3)
 
 C*** THE END!
 /EOF
