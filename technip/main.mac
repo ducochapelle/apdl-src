@@ -1,0 +1,229 @@
+!
+!   PROJECT: OI2014-082 TECHNIP Pipeline Global Analysis
+!   VERSION: Github does versioning
+!   AUTHOR: Duco Chapelle                        
+!
+!   ANSYS VERSION: 16.1
+!   UNITS: Newton / mm / tonne / s
+!   force       = tonne*mm/s/s = N
+!   mass        = tonne
+!   accel       = mm/s/s
+!   length      = mm
+!   pressure    = tonne*mm/s/s/mm/mm = N/mm/mm = MPa
+!   CS: x = length, y = up, surface is at y = 0 + pipe diameter.
+!
+
+C*** General
+FINISH $ /CLEAR,START $ /ESHA,1 $ /PBC,U,,1 $ /PBC,ROT,,1
+
+!===================================================================
+C*** Definitions
+!===================================================================
+
+! Place 0 and 8 are touchdown points. Other points are supports.
+! Input from KDS-OFF-REP-145513-002 table 12
+
+place_8=211038.340994698
+place_7=228033.109435063
+place_6=245024.448590425
+place_5=265017.57336431
+place_4=269016.674082028
+place_3=274016.970186918
+place_2=283017.267403668
+place_1=291017.72948245
+place_0=305019.165373101
+
+! Pipe
+pipe_init_h         = 0    ! Initial height of pipe above the seabed
+pipe_length         = 1000*1000*10    ! Length of pipe [mm]
+pipe_diameter       = 812.8     ! Outer diameter pipe [mm]
+pipe_wallthk        = 15.9      ! Wall thickness pipe [mm]
+pipe_nc             = 12        ! Circumferential elements [-]
+pipe_nl             = 1000*10   ! Length of elements [mm]
+ext_cor_coat_thk    = 2.5       ! External corrosion coating [mm]
+con_coat_thk        = 100       ! Concrete coating [mm] 
+g_acc               = 9806      ! Gravitational acceleration [mm/s^2]
+water_depth         = 15000     ! Used ad-hoc, for below-soil coordinates
+seabed_width        = 5000
+seabed_thickness    = 1000
+l_fj                = 12200     ! length of one joint
+l_cb                = 600       ! length of cut back
+
+C*** Material Properties
+! Densities [tonne/mm3]
+ext_cor_coat        = 1.280e-9  ! [tonne/mm3]
+concrete_coating    = 3.043e-9  ! [tonne/mm3]
+content             = 1e-11     ! [tonne/mm3]
+seawater            = 1.025e-9  ! [tonne/mm3]
+steel               = 7.85e-9   ! [tonne/mm3]
+soil                = 1e-15     ! [tonne/mm3]
+! Other
+absorption          = 0.05      ! [-]
+pi                  = acos(-1)  ! [-]
+soil_E              = 1.5e1     ! [MPa]
+soil_v              = 0.3       ! [-]
+steel_E             = 207e3     ! [MPa]
+steel_v             = 0.3       ! [-]
+soil_mu             = 0.05      ! [-]
+! Post repair material
+weight_pc 	    = 0.465	! [tonne]
+weight_ik 	    = 2.235	! [tonne]
+weight_ss           = 2.600	! [tonne]
+
+C*** Added Mass
+weight_con_coat = (((pipe_diameter+2*ext_cor_coat_thk+2*con_coat_thk)**2)-((pipe_diameter+2*ext_cor_coat_thk)**2))*pi*0.25*concrete_coating
+weight_ext_cor_coat = ((pipe_diameter+2*ext_cor_coat_thk)**2-pipe_diameter**2)*pi*0.25*ext_cor_coat
+weight_buoyancy = ((pipe_diameter+2*ext_cor_coat_thk+2*con_coat_thk)**2)*0.25*pi*seawater
+weight_water_absorption= (weight_con_coat*absorption)/(concrete_coating/seawater)
+weight_fjc = ((pipe_diameter+2*ext_cor_coat_thk+2*con_coat_thk)**2 - pipe_diameter**2)*pi*0.25*seawater
+added_mass = (1-l_cb/l_fj)*(weight_ext_cor_coat + weight_con_coat + weight_water_absorption) + l_cb/l_fj*weight_fjc - weight_buoyancy
+
+C*** Buoyancy Mass
+buoy_pipe_st = (pipe_diameter**2-(pipe_diameter-2*pipe_wallthk)**2)*pi*0.25*seawater
+buoy_weight_ext_cor_coat = ((pipe_diameter+2*ext_cor_coat_thk)**2-pipe_diameter**2)*pi*0.25*seawater
+buoy_weight_con_coat = (((pipe_diameter+2*ext_cor_coat_thk+2*con_coat_thk)**2)-((pipe_diameter+2*ext_cor_coat_thk)**2))*pi*0.25*seawater
+buoy_content = seawater*0.25*pi*(pipe_diameter-2*pipe_wallthk)**2 
+total_buoy = buoy_pipe_st + buoy_weight_ext_cor_coat + buoy_weight_con_coat + buoy_content  
+
+C*** Net Mass
+net_ext_cor_coat = weight_ext_cor_coat - buoy_weight_ext_cor_coat 
+net_con_coat = weight_con_coat - buoy_weight_con_coat
+
+! The corrosion coating, concrete coating and water absorption is the weight that is taken off from the pipe.
+mass_no_coating = net_ext_cor_coat + net_con_coat + weight_water_absorption   
+
+! PlidCo, ContainmentClamp, StandoffSleeve
+
+D_pc = 1008 ! [mm]
+D_ik = 1400 ! [mm]
+V_ss = 2860113129 ! [mm3]
+W_pc =  365 ! [mm]
+W_ik =  855 ! [mm]
+W_ss = 1900 ! [mm]
+
+
+F_pc_dry = weight_pc*g_acc
+F_ik_dry = weight_ik*g_acc
+F_ss_dry = weight_ss*g_acc
+F_pc_wet = (weight_pc - pi/4*D_pc**2*W_pc*seawater)*g_acc 
+F_ik_wet = (weight_ik - pi/4*D_ik**2*W_ik*seawater)*g_acc 
+F_ss_wet = (weight_ss -              V_ss*seawater)*g_acc 
+
+
+! forces that need to be subtracted to make it right
+L_no_coating = 3000
+F_no_coating = mass_no_coating*L_no_coating*g_acc 
+L_dry = 6000 ! length of habitat
+F_dry = total_buoy*L_dry*g_acc
+
+C*** Hydrostatic Pressure
+hyd_pres = water_depth*g_acc*seawater
+
+C*** Load content
+load_content = ((pipe_diameter-(2*pipe_wallthk))**2)*0.25*pi*content*g_acc
+
+C*** Content Pressure
+pres_stp = 1
+*dim,pres_int,array,pres_stp
+pres_int(1) = 43.1 ! , 2.76, 3.45, 4.14, 4.83, 7.93
+
+C*** Configurations
+conf_stp = 1 ! Plidco                                   wet
+conf_stp = 2 ! Plidco + ik clamp                      	wet
+conf_stp = 3 ! Plidco + ik clamp                      	dry
+conf_stp = 4 ! Plidco + ik clamp + S.O.S. (welded)      dry
+conf_stp = 5 ! Plidco + ik clamp + S.O.S.            	wet
+
+
+!===================================================================
+/PREP7 
+!===================================================================
+
+C*** Define material
+!steel
+MPTEMP,,,,,,,, 
+MPTEMP,1,0 
+MPDATA,EX,1,,steel_E
+MPDATA,PRXY,1,,steel_v
+MPTEMP,,,,,,,, 
+MPTEMP,1,0 
+MPDATA,DENS,1,,steel 
+!soil
+MPTEMP,,,,,,,, 
+MPTEMP,1,0 
+MPDATA,EX,2,,soil_E 
+MPDATA,PRXY,2,,soil_v 
+MPTEMP,,,,,,,, 
+MPTEMP,1,0 
+MPDATA,DENS,2,,soil
+ 
+C*** Define pipe
+ET,1,PIPE288
+SECTYPE,1,PIPE, ,  
+SECDATA,pipe_diameter,pipe_wallthk,pipe_nc,0,1,0,0,0,
+SECOFFSET,0,0, 
+SECCONTROL,added_mass,  
+KEYOPT,1,6,1
+KEYOPT,1,4,2
+ 
+C*** Define soil
+ET,2,SOLID185
+
+C*** Geometry
+! Pipe
+K,,0,pipe_init_h,0  
+K,,pipe_length,pipe_init_h,0
+line_pipe_start = 1
+line_pipe_end = 2
+L,1,2  
+*get, line_pipe, LINE, 0, NUM, MAX
+
+C*** Mesh
+LESIZE,1,pipe_nl
+LMESH,line_pipe
+CM,LP_E,ELEM
+CM,LP_N,NODE
+VMESH,ALL
+CMSEL,,LP_E
+NSLE
+*GET,node_numbers, NODE,0,COUNT
+ALLSEL
+
+KSEL,,,,line_pipe_start
+NSLK
+line_pipe_start_node = ndnext(0)
+ALLSEL
+KSEL,,,,line_pipe_end
+NSLK
+line_pipe_end_node = ndnext(0)
+ALLSEL
+
+!===================================================================
+/SOLU
+!===================================================================
+ANTYPE,0
+NLGEOM,1
+
+!-------------------------------------------------------------------
+C*** Load step 1: Displacement & external pressure
+!-------------------------------------------------------------------
+! pipe left side
+D,line_pipe_start_node,UX,0
+D,line_pipe_start_node,UY,0
+D,line_pipe_start_node,UZ,0
+D,line_pipe_start_node,ROTX,0
+! D,line_pipe_start_node,ROTY,0
+! D,line_pipe_start_node,ROTZ,0
+
+! pipe right side
+D,line_pipe_end_node,UX,0
+D,line_pipe_end_node,UY,0
+D,line_pipe_end_node,UZ,0
+D,line_pipe_end_node,ROTX,0
+! D,line_pipe_end_node,ROTY,0
+! D,line_pipe_end_node,ROTZ,0
+
+! pressure
+SFE,LP_E,2,PRES,1,hyd_pres*1000      ! external 
+! SFE,LP_E,1,PRES,1,pres_int(1)  ! internal 
+
