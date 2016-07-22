@@ -14,7 +14,7 @@
 !
 
 C*** General
-FINISH $ /CLEAR,START $ /ESHA,1 $ /PBC,U,,1 $ /PBC,ROT,,1
+FINISH $ /CLEAR,START $ /ESHA,0 $ /PBC,U,,1 $ /PBC,ROT,,1
 
 !===================================================================
 C*** Definitions
@@ -35,7 +35,7 @@ place_0=305019.165373101
 
 ! Pipe
 pipe_init_h         = 0    ! Initial height of pipe above the seabed
-pipe_length         = 1000*1000*10    ! Length of pipe [mm]
+pipe_length         = 1000*1000*1    ! Length of pipe [mm]
 pipe_diameter       = 812.8     ! Outer diameter pipe [mm]
 pipe_wallthk        = 15.9      ! Wall thickness pipe [mm]
 pipe_nc             = 12        ! Circumferential elements [-]
@@ -202,7 +202,7 @@ ALLSEL
 /SOLU
 !===================================================================
 ANTYPE,0
-NLGEOM,1
+NLGEOM,0
 
 !-------------------------------------------------------------------
 C*** Load step 1: Displacement & external pressure
@@ -216,7 +216,7 @@ D,line_pipe_start_node,ROTX,0
 ! D,line_pipe_start_node,ROTZ,0
 
 ! pipe right side
-D,line_pipe_end_node,UX,0
+D,line_pipe_end_node,UX,-1
 D,line_pipe_end_node,UY,0
 D,line_pipe_end_node,UZ,0
 D,line_pipe_end_node,ROTX,0
@@ -224,6 +224,14 @@ D,line_pipe_end_node,ROTX,0
 ! D,line_pipe_end_node,ROTZ,0
 
 ! pressure
-SFE,LP_E,2,PRES,1,hyd_pres*1000      ! external 
+! SFE,LP_E,2,PRES,1,hyd_pres*1000      ! external 
 ! SFE,LP_E,1,PRES,1,pres_int(1)  ! internal 
 
+
+SOLVE
+FINISH
+/SOLU
+ANTYPE, BUCKLE
+SOLVE
+/POST1
+SET, LIST
